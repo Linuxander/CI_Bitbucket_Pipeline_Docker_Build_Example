@@ -1,0 +1,266 @@
+---
+image: ubuntu:latest
+definitions:
+  steps:
+    - step: &test_docker_build
+        name: Test - Dockerfile build (not pushing to Dockerhub)
+        script:
+          # Create a current version number variable
+          - CURRENT_VERSION_NUMBER=$(cat version.txt)
+
+          # Setup an IMAGE_NAME variable to use for the dockerbuild
+          - export IMAGE_NAME=$DOCKER_HUB_USERNAME/$DOCKER_HUB_REPO_NAME:$CURRENT_VERSION_NUMBER
+
+          # Buld docker img using the Dockerfile in root of repo
+          #- docker build -t $IMAGE_NAME . # <- Example if your Dockerfile is in the root of repo
+          - docker build . -f Dockerfile -t $IMAGE_NAME
+        services:
+          - docker
+    - step: &configure_pipelines_ssh_keys
+        name: Configure pipelines ssh keys
+        script:
+          # Install ssh-agent if not already installed, it is required by Docker
+          # (change apt-get to yum if you use an RPM-based image)
+          - 'command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )'
+
+          # Run ssh-agent (inside the build environment)
+          - eval $(ssh-agent -s)
+
+          # Pipeline SSH Key Setup Instructions:
+          #
+          # 1. A Pipeline SSH Key pair needs to be generated in:
+          #      - Repository settings
+          #      - SSH Keys (in the left panel under the Pipelines section)
+          # 2. Copy the Ppeline's Public SSH Key from:
+          #      - Repository settings
+          #      - SSH Keys (in the left panel under the Pipelines section)
+          # 3. Add the Pipeline's Public SSH Key to your user settings in:
+          #      - Personal settings
+          #      - SSH Keys (in the left panel under the Security section)
+          #
+          # The next command loads the Pipeline Private Key to the agent store of this build session.
+          - cat /opt/atlassian/pipelines/agent/ssh/id_rsa | tr -d '\r' | ssh-add - > /dev/null
+
+          # Explination: We're using tr to fix line endings which
+          # makes ed25519 keys work without extra base64 encoding.
+          # Source: http://bit.ly/3XL04EZ
+
+          # Create the SSH directory and give it the right permissions
+          - mkdir -p ~/.ssh
+          - chmod 700 ~/.ssh
+
+          # Optional: if using any Git commands, set the user name and email.
+          # - git config --global user.email "user@example.com"
+          # - git config --global user.name "User name"
+    - step: &versioning_increment_major_number
+        name: Versioning - Increment major number
+        script:
+          # Git installation tends to prompt user
+          # to configure timezone (tzdata)
+          # Lets install tzdata and set it to non
+          # interactive and then install git
+
+          # Create a variable to store which number section to change
+          - NUMBER_TYPE="major"
+
+          # Install and configure tzdata
+          - apt-get update -y && apt-get install tzdata -y
+
+          # set noninteractive installation
+          - export DEBIAN_FRONTEND=noninteractive
+
+          # set your timezone
+          - ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+          - dpkg-reconfigure --frontend noninteractive tzdata
+
+          # Install git
+          - apt-get update -y && apt-get install git-all -y
+
+          # Increment version number
+          - bash scripts/version.sh\n\
+            $NUMBER_TYPE $BITBUCKET_BUILD_NUMBER $BB_AUTH_STRING
+
+          # Create an updated version number variable
+          - UPDATED_VERSION_NUMBER=$(cat version.txt)
+
+          # Output a new version number file with the new version number
+          # variable value so that the file can be made available as an artifact
+          - echo $UPDATED_VERSION_NUMBER >> new_version_number.txt
+
+          # Verify the contents of the new version number file
+          - echo $(cat new_version_number.txt)
+        artifacts:
+          - new_version_number.txt
+    - step: &versioning_increment_minor_number
+        name: Versioning - Increment minor number
+        script:
+          # Git installation requires timezone (tzdata) to be installed and set
+
+          # Create a variable to store which number section to change
+          - NUMBER_TYPE="minor"
+
+          # Install and configure tzdata
+          - apt-get update -y && apt-get install tzdata -y
+
+          # set noninteractive installation
+          - export DEBIAN_FRONTEND=noninteractive
+
+          # set your timezone
+          - ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+          - dpkg-reconfigure --frontend noninteractive tzdata
+
+          # Install git
+          - apt-get update -y && apt-get install git-all -y
+
+          # Increment version number
+          - bash scripts/version.sh $NUMBER_TYPE $BITBUCKET_BUILD_NUMBER $BB_AUTH_STRING
+
+          # Create an updated version number variable
+          - UPDATED_VERSION_NUMBER=$(cat version.txt)
+
+          # Create file with new version to use as artifact later
+          - echo $UPDATED_VERSION_NUMBER >> new_version_number.txt
+
+          # Verify the contents of the new version number file
+          - echo $(cat new_version_number.txt)
+        artifacts:
+          - new_version_number.txt
+    - step: &versioning_increment_patch_number
+        name: Versioning - Increment patch number
+        script:
+          # Git installation requires timezone (tzdata) to be installed and set
+
+          # Create a variable to store which number section to change
+          - NUMBER_TYPE="patch"
+
+          # Install and configure tzdata
+          - apt-get update -y && apt-get install tzdata -y
+
+          # set noninteractive installation
+          - export DEBIAN_FRONTEND=noninteractive
+
+          # set your timezone
+          - ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+          - dpkg-reconfigure --frontend noninteractive tzdata
+
+          # Install git
+          - apt-get update -y && apt-get install git-all -y
+
+          # Increment version number
+          - bash scripts/version.sh $NUMBER_TYPE $BITBUCKET_BUILD_NUMBER $BB_AUTH_STRING
+
+          # Create an updated version number variable
+          - UPDATED_VERSION_NUMBER=$(cat version.txt)
+
+          # Create file with new version to use as artifact later
+          - echo $UPDATED_VERSION_NUMBER >> new_version_number.txt
+
+          # Verify the contents of the new version number file
+          - echo $(cat new_version_number.txt)
+        artifacts:
+          - new_version_number.txt
+    - step: &versioning_increment_build_number
+        name: Versioning - Increment build number
+        script:
+          # Git installation requires timezone (tzdata) to be installed and set
+
+          # Create a variable to store which number section to change
+          - NUMBER_TYPE="build"
+
+          # Install and configure tzdata
+          - apt-get update -y && apt-get install tzdata -y
+
+          # set noninteractive installation
+          - export DEBIAN_FRONTEND=noninteractive
+
+          # set your timezone
+          - ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+          - dpkg-reconfigure --frontend noninteractive tzdata
+
+          # Install git
+          - apt-get update -y && apt-get install git-all -y
+
+          # Increment version number
+          - bash scripts/version.sh $NUMBER_TYPE $BITBUCKET_BUILD_NUMBER $BB_AUTH_STRING
+
+          # Create an updated version number variable
+          - UPDATED_VERSION_NUMBER=$(cat version.txt)
+
+          # Create file with new version to use as artifact later
+          - echo $UPDATED_VERSION_NUMBER >> new_version_number.txt
+
+          # Verify the contents of the new version number file
+          - echo $(cat new_version_number.txt)
+        artifacts:
+          - new_version_number.txt
+    - step: &deploy_docker_image_to_duckerhub_tagged
+        name: DockerHub - Build & Deploy Docker Image (version tagged) to DockerHub
+        script:
+          # use the artifact from the previous step
+          - NEW_VERSION_NUMBER=$(cat new_version_number.txt)
+
+          # Setup an IMAGE_NAME variable to use for the dockerbuild
+          - export IMAGE_NAME=$DOCKER_HUB_USERNAME/$DOCKER_HUB_REPO_NAME:$NEW_VERSION_NUMBER
+
+          # Buld docker img using the Dockerfile in root of repo
+          - docker build . -f Dockerfile -t $IMAGE_NAME
+
+          # authenticate with the Docker Hub registry
+          - echo $DOCKER_HUB_TOKEN | docker login -u $DOCKER_HUB_USERNAME --password-stdin
+
+          # push the new Docker image to the Docker registry
+          - docker push $IMAGE_NAME
+        services:
+          - docker
+    - step: &deploy_docker_image_to_duckerhub_latest
+        name: DockerHub - Build & Deploy Docker Image (latested) to DockerHub
+        script:
+          # Setup an LATEST_IMAGE_NAME variable to upload a version tagged as latest (no version number specified)
+          - export LATEST_IMAGE_NAME=$DOCKER_HUB_USERNAME/$DOCKER_HUB_REPO_NAME
+
+          # Buld docker img using the Dockerfile in root of repo
+          - docker build . -f Dockerfile -t $LATEST_IMAGE_NAME
+
+          # authenticate with the Docker Hub registry
+          - echo $DOCKER_HUB_TOKEN | docker login -u $DOCKER_HUB_USERNAME --password-stdin
+
+          # push the new Docker image to the Docker registry
+          - docker push $LATEST_IMAGE_NAME
+        services:
+          - docker
+pipelines:
+  pull-requests:  # Triggered when the source of the PR is true
+    feature/*:  # <-runs if you push branch to origin & open feature/* PR exists
+      - step:
+          name: "Trigger - pull-requests > feature/*"
+          script:
+            - echo "Pipeline triggered - pipelines > pull-requests > feature/*"
+      - step:
+          <<: *test_docker_build
+  branches:
+    develop:
+      - step:
+          name: "Trigger - branches > develop"
+          script:
+            - echo "Pipeline triggered - pipelines > develop > develop"
+      - step:
+          <<: *test_docker_build
+      - step:
+          <<: *configure_pipelines_ssh_keys
+      - step:
+          <<: *versioning_increment_build_number
+    master:
+      - step:
+          name: "Trigger - branches > master"
+          script:
+            - echo "Pipeline triggered - pipelines > develop > develop"
+      - step:
+          <<: *test_docker_build
+      - step:
+          <<: *configure_pipelines_ssh_keys
+      - step:
+          <<: *versioning_increment_patch_number
+      - step: # Enable/Disable this step if you wish to deploy or not to deploy the docker image to dockerhub
+          <<: *deploy_docker_image_to_duckerhub_tagged
+      - step: # Enable/Disable this step if you wish to deploy or not to deploy the docker image to dockerhub
+          <<: *deploy_docker_image_to_duckerhub_latest
